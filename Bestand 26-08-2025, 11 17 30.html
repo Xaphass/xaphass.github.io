@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Mini Melvor Idle - Active Skill</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 10px; }
+  #skillsContainer {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .skill, .monster, .craft {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 8px;
+    text-align: center;
+    background: #f9f9f9;
+  }
+  .skill.locked { opacity: 0.5; }
+  .active { border: 2px solid gold !important; }
+  .progress { width: 100%; background: #ddd; border-radius: 5px; overflow: hidden; margin-top: 5px; }
+  .progress-bar { height: 15px; background: #4caf50; width: 0%; }
+  button { padding: 5px 8px; margin-top: 5px; width: 80%; }
+</style>
+</head>
+<body>
+<h1>Mini Melvor Idle - Active Skill</h1>
+
+<h2>Skills</h2>
+<div id="skillsContainer"></div>
+
+<h2>Monsters</h2>
+<div id="monstersContainer"></div>
+
+<h2>Crafting</h2>
+<div id="craftingContainer"></div>
+
+<h2>Inventory</h2>
+<ul id="inventory"></ul>
+
+<button id="prestigeBtn">Prestige / Rebirth</button>
+
+<script>
+let prestigeBonus = 1;
+let lastLogout = Date.now();
+let activeSkill = null; // Huidige skill/combat die XP krijgt
+let eventActive = false;
+
+// --- Skills ---
+const skills = [
+  {name:"Woodcutting", xp:0, level:1, xpNeeded:10, item:"Logs", xpPerAction:2},
+  {name:"Fishing", xp:0, level:1, xpNeeded:10, item:"Fish", xpPerAction:2},
+  {name:"Mining", xp:0, level:1, xpNeeded:10, item:"Ore", xpPerAction:2, dependencies:{skill:"Woodcutting", level:5}},
+  {name:"Combat", xp:0, level:1, xpNeeded:10, item:"Loot", xpPerAction:2},
+  {name:"Firemaking", xp:0, level:1, xpNeeded:10, item:"Ash", xpPerAction:2, dependencies:{skill:"Woodcutting", level:3}},
+  {name:"Cooking", xp:0, level:1, xpNeeded:10, item:"Cooked Fish", xpPerAction:2, dependencies:{skill:"Fishing", level:3}},
+  {name:"Smithing", xp:0, level:1, xpNeeded:10, item:"Ingot", xpPerAction:2, dependencies:{skill:"Mining", level:3}},
+  {name:"Herblore", xp:0, level:1, xpNeeded:10, item:"Potion", xpPerAction:2},
+  {name:"Crafting", xp:0, level:1, xpNeeded:10, item:"Plank", xpPerAction:2},
+  {name:"Farming", xp:0, level:1, xpNeeded:10, item:"Crop", xpPerAction:2},
+  {name:"Hunting", xp:0, level:1, xpNeeded:10, item:"Meat", xpPerAction:2},
+  {name:"Thieving", xp:0, level:1, xpNeeded:10, item:"Coin", xpPerAction:2},
+  {name:"Fletching", xp:0, level:1, xpNeeded:10, item:"Arrow", xpPerAction:2},
+  {name:"Magic", xp:0, level:1, xpNeeded:10, item:"Mana", xpPerAction:2},
+  {name:"Runecrafting", xp:0, level:1, xpNeeded:10, item:"Rune", xpPerAction:2}
+];
+
+// --- Inventory ---
+let inventory = {};
+
+// --- Monsters ---
+const monsters = [
+  {name:"Slime", hp:10, maxHp:10, xp:5, loot:[{item:"Gel", dropRate:1, amount:1}]},
+  {name:"Goblin", hp:20, maxHp:20, xp:10, loot:[{item:"Goblin Ear", dropRate:0.7, amount:1},{item:"Gold Coin", dropRate:0.3, amount:1}]}
+];
+
+// --- Crafting ---
+const craftingRecipes = [
+  {input:{"Logs":3}, output:{"Plank":1}, requiredSkill:{name:"Woodcutting", level:1}},
+  {input:{"Ore":2}, output:{"Ingot":1}, requiredSkill:{name:"Mining", level:3}},
+  {input:{"Fish":2}, output:{"Cooked Fish":1}, requiredSkill:{name:"Cooking", level:1}}
+];
+
+const skillsContainer = document.getElementById('skillsContainer');
+const inventoryList = document.getElementById('inventory');
+const monstersContainer = document.getElementById('monstersContainer');
+const craftingContainer = document.getElementById('craftingContainer');
+const prestigeBtn = document.getElementById('prestigeBtn');
+
+// --- Load saved data ---
+if(localStorage.getItem('gameData')){
+    const savedData = JSON.parse(localStorage.getItem('gameData'));
+    for(let i=0;i<skills.length;i++){
+        skills[i].xp = savedData.skills[i].xp;
+        skills[i].level = savedData.skills[i].level;
+        skills[i].xpNeeded = savedData.skills[i].xpNeeded;
+    }
+    inventory = savedData.inventory || {};
+    prestigeBonus = savedData.prestigeBonus || 1;
+    lastLogout = savedData.lastLogout || Date.now();
+}
+
+// --- Utility Functions ---
+function canUseSkill(skill){
+  if(!skill.dependencies) return true;
+  const dep = skills.find(s => s.name === skill.dependencies.skill);
+  return dep.level >= skill.dependencies.level;
+}
+
+function addXP(skill, amount){
+    skill.xp += amount;
+    while(skill.xp >= skill.xpNeeded){
+        skill.xp -= skill.xpNeeded;
+        skill.level++;
+        skill.xpNeeded = Math.floor(skill.xpNeeded * 1.5);
+    }
+    updateSkillUI(skill);
+    saveGame();
+}
+
+function addItem(item, amount){
+    if(inventory[item]) inventory[item] += amount;
+    else inventory[item] = amount;
+    updateInventoryUI();
+}
+
+function updateInventoryUI(){
+    inventoryList.innerHTML = '';
+    for(const item in inventory){
+        const li = document.createElement('li');
+        li.textContent = `${item}: ${inventory[item]}`;
+        inventoryList.appendChild(li);
+    }
+}
+
+// --- Skills UI ---
+function createSkillUI(skill){
+    const div = document.createElement('div');
+    div.className = 'skill';
+    div.innerHTML = `
+        <h4>${skill.name}</h4>
+        <p>Level: <span class="level">${skill.level}</span></p>
+        <p>XP: <span class="xp">${skill.xp}</span> / <span class="xpNeeded">${skill.xpNeeded}</span></p>
+        <div class="progress"><div class="progress-bar"></div></div>
+        <button>Train / Select</button>
+    `;
+    const btn = div.querySelector('button');
+    skill.ui = {
+        levelSpan: div.querySelector('.level'),
+        xpSpan: div.querySelector('.xp'),
+        xpNeededSpan: div.querySelector('.xpNeeded'),
+        progressBar: div.querySelector('.progress-bar'),
+        button: btn,
+        div: div
+    };
+    updateSkillButton(skill);
+    btn.addEventListener('click', ()=>{
+        if(!canUseSkill(skill)) return;
+        activeSkill = skill.name;
+        updateActiveUI();
+    });
+    skillsContainer.appendChild(div);
+}
+
+function updateSkillUI(skill){
+    skill.ui.levelSpan.textContent = skill.level;
+    skill.ui.xpSpan.textContent = skill.xp;
+    skill.ui.xpNeededSpan.textContent = skill.xpNeeded;
+    skill.ui.progressBar.style.width = ((skill.xp / skill.xpNeeded) * 100) + '%';
+}
+
+function updateSkillButton(skill){
+    if(!canUseSkill(skill)){
+        skill.ui.button.disabled = true;
+        skill.ui.button.textContent = `Locked (requires ${skill.dependencies.skill} lvl ${skill.dependencies.level})`;
+        skill.ui.div.classList.add('locked');
+    } else {
+        skill.ui.button.disabled = false;
+        skill.ui.button.textContent = "Train / Select";
+        skill.ui.div.classList.remove('locked');
+    }
+}
+
+// --- Monsters ---
+function createMonsterUI(monster){
+    const div = document.createElement('div');
+    div.className = 'monster';
+    const hpBar = document.createElement('div');
+    hpBar.className = 'progress';
+    const hpInner = document.createElement('div');
+    hpInner.className = 'progress-bar';
+    hpBar.appendChild(hpInner);
+    div.innerHTML = `<h4>${monster.name}</h4>`;
+    div.appendChild(hpBar);
+    const btn = document.createElement('button');
+    btn.textContent = 'Select / Attack';
+    btn.addEventListener('click', ()=>{
+        activeSkill = "Combat";
+        updateActiveUI();
+    });
+    div.appendChild(btn);
+    monstersContainer.appendChild(div);
+    monster.hpBar = hpInner;
+    monster.maxHp = monster.hp;
+    updateMonsterUI(monster);
+}
+
+function updateMonsterUI(monster){
+    monster.hpBar.style.width = Math.max(0,(monster.hp/monster.maxHp)*100)+'%';
+}
+
+function attackMonster(monster){
+    const damage = 5;
+    monster.hp -= damage;
+    if(monster.hp <=0){
+        const combatSkill = skills.find(s=>s.name==="Combat");
+        addXP(combatSkill, monster.xp*prestigeBonus);
+        for(const drop of monster.loot){
+            if(Math.random()<drop.dropRate) addItem(drop.item, drop.amount);
+        }
+        monster.hp = monster.maxHp;
+    }
+    updateMonsterUI(monster);
+    saveGame();
+}
+
+// --- Crafting ---
+function createCraftingUI(recipe){
+    const div = document.createElement('div');
+    div.className = 'craft';
+    div.innerHTML = `<p>Craft: ${JSON.stringify(recipe.output)}</p>`;
+    const btn = document.createElement('button');
+    btn.textContent = 'Craft';
+    btn.addEventListener('click', ()=>{
+        const skill = skills.find(s=>s.name===recipe.requiredSkill.name);
+        if(skill.level<recipe.requiredSkill.level){
+            alert(`Requires ${skill.name} lvl ${recipe.requiredSkill.level}`);
+            return;
+        }
+        for(const item in recipe.input){
+            if(!inventory[item] || inventory[item]<recipe.input[item]){
+                alert("Not enough materials");
+                return;
+            }
+        }
+        for(const item in recipe.input) inventory[item]-=recipe.input[item];
+        for(const item in recipe.output) addItem(item, recipe.output[item]);
+        updateInventoryUI();
+        saveGame();
+    });
+    div.appendChild(btn);
+    craftingContainer.appendChild(div);
+}
+
+// --- Active Skill UI Highlight ---
+function updateActiveUI(){
+    skills.forEach(s=>{
+        if(s.name===activeSkill) s.ui.div.classList.add('active');
+        else s.ui.div.classList.remove('active');
+    });
+    monsters.forEach(m=>{
+        if(activeSkill==="Combat") m.hpBar.parentElement.classList.add('active');
+        else m.hpBar.parentElement.classList.remove('active');
+    });
+}
+
+// --- Prestige ---
+prestigeBtn.addEventListener('click', ()=>{
+    if(confirm("Reset all skills for 10% XP bonus?")){
+        skills.forEach(s=>{s.level=1;s.xp=0;s.xpNeeded=10; updateSkillUI(s);});
+        inventory={};
+        updateInventoryUI();
+        prestigeBonus *= 1.1;
+        saveGame();
+    }
+});
+
+// --- Offline Progress ---
+function offlineProgress(){
+    const now = Date.now();
+    const diff = Math.floor((now - lastLogout)/1000);
+    if(diff>0){
+        if(activeSkill){
+            if(activeSkill==="Combat"){
+                monsters.forEach(monster=>{
+                    const kills = Math.floor(diff/5);
+                    const combatSkill = skills.find(s=>s.name==="Combat");
+                    addXP(combatSkill, monster.xp*kills*prestigeBonus);
+                    for(const drop of monster.loot){
+                        addItem(drop.item, drop.amount*kills);
+                    }
+                });
+            } else {
+                const skill = skills.find(s=>s.name===activeSkill);
+                if(skill) addXP(skill, skill.xpPerAction*diff*prestigeBonus);
+            }
+        }
+    }
+    lastLogout = now;
+}
+
+// --- Save Game ---
+function saveGame(){
+    localStorage.setItem('gameData', JSON.stringify({
+        skills: skills.map(s=>({level:s.level,xp:s.xp,xpNeeded:s.xpNeeded})),
+        inventory,
+        prestigeBonus,
+        lastLogout
+    }));
+}
+
+// --- Initialization ---
+skills.forEach(createSkillUI);
+monsters.forEach(createMonsterUI);
+craftingRecipes.forEach(createCraftingUI);
+updateInventoryUI();
+offlineProgress();
+
+// --- Idle / Active Training ---
+setInterval(()=>{
+    if(!activeSkill) return;
+    if(activeSkill==="Combat"){
+        monsters.forEach(monster=>attackMonster(monster));
+    } else {
+        const skill = skills.find(s=>s.name===activeSkill);
+        if(skill && canUseSkill(skill)){
+            addXP(skill, skill.xpPerAction*prestigeBonus);
+            addItem(skill.item,1);
+        }
+    }
+},2000);
+
+window.addEventListener('beforeunload',()=>saveGame());
+</script>
+</body>
+</html>
