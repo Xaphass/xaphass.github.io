@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Melvor Idle</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #1e1e1e;
+      color: white;
+      text-align: center;
+    }
+    h1 { color: gold; }
+    #skill-menu button, #combat-menu button, #settings-menu button, #cheat-menu button {
+      margin: 5px;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .active { border: 2px solid gold; }
+    .progress {
+      width: 200px;
+      background: #333;
+      border-radius: 5px;
+      margin: 5px auto;
+      height: 20px;
+      position: relative;
+    }
+    .progress-fill {
+      background: limegreen;
+      height: 100%;
+      width: 0%;
+      border-radius: 5px;
+    }
+    .skill-container {
+      margin-bottom: 10px;
+    }
+    #inventory { margin-top: 20px; }
+    #settings-menu, #cheat-menu { margin-top: 30px; }
+  </style>
+</head>
+<body>
+  <h1>Mini Melvor Idle</h1>
+
+  <div id="skill-menu"></div>
+  <div id="combat-menu"></div>
+  <div id="active-skill"></div>
+  <div id="inventory"></div>
+
+  <div id="settings-menu">
+    <h2>⚙️ Settings</h2>
+    <button onclick="saveGame()">Save Game</button>
+    <button onclick="loadGame()">Load Game</button>
+    <button onclick="resetGame()">Reset Game</button>
+  </div>
+
+  <div id="cheat-menu">
+    <h2>🧪 Cheat Menu</h2>
+    <button onclick="cheatGold()">+1000 Gold</button>
+    <button onclick="cheatXP()">+1000 XP (active skill)</button>
+    <button onclick="cheatLevels()">+10 Levels (active skill)</button>
+    <button onclick="cheatPrestige()">+10 Prestige</button>
+  </div>
+
+  <script>
+    let gold = 0;
+    let prestige = 0;
+    let activeSkill = null;
+
+    const skills = [
+      { name: "Woodcutting", xp: 0, level: 1 },
+      { name: "Fishing", xp: 0, level: 1 },
+      { name: "Mining", xp: 0, level: 1 },
+      { name: "Smithing", xp: 0, level: 1 },
+      { name: "Cooking", xp: 0, level: 1 },
+      { name: "Farming", xp: 0, level: 1 },
+      { name: "Crafting", xp: 0, level: 1 },
+      { name: "Runecrafting", xp: 0, level: 1 },
+      { name: "Herblore", xp: 0, level: 1 },
+      { name: "Thieving", xp: 0, level: 1 },
+      { name: "Agility", xp: 0, level: 1 },
+      { name: "Prayer", xp: 0, level: 1 },
+      { name: "Magic", xp: 0, level: 1 },
+      { name: "Ranged", xp: 0, level: 1 },
+      { name: "Combat", xp: 0, level: 1 }
+    ];
+
+    // UI genereren
+    const skillMenu = document.getElementById("skill-menu");
+    skills.forEach(skill => {
+      const container = document.createElement("div");
+      container.classList.add("skill-container");
+
+      const btn = document.createElement("button");
+      btn.innerText = `${skill.name} (Lvl ${skill.level})`;
+      btn.onclick = () => setActiveSkill(skill.name, btn);
+
+      const progress = document.createElement("div");
+      progress.classList.add("progress");
+
+      const fill = document.createElement("div");
+      fill.classList.add("progress-fill");
+      progress.appendChild(fill);
+
+      container.appendChild(btn);
+      container.appendChild(progress);
+      skillMenu.appendChild(container);
+
+      skill.btn = btn;
+      skill.progressFill = fill;
+    });
+
+    // Combat menu
+    const combatMenu = document.getElementById("combat-menu");
+    const combatInfo = document.createElement("p");
+    combatInfo.innerText = "Combat Level: 1";
+    combatMenu.appendChild(combatInfo);
+
+    function updateCombatInfo() {
+      const combatSkill = skills.find(s => s.name === "Combat");
+      combatInfo.innerText = `Combat Level: ${combatSkill.level}`;
+    }
+
+    function setActiveSkill(name, btn) {
+      activeSkill = name;
+      skills.forEach(s => s.btn.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("active-skill").innerText =
+        `Actief: ${name}`;
+    }
+
+    function xpNeeded(level) {
+      return Math.floor(50 * Math.pow(1.15, level - 1));
+    }
+
+    function addXP(skill, amount) {
+      skill.xp += amount;
+      let needed = xpNeeded(skill.level);
+      while (skill.xp >= needed) {
+        skill.xp -= needed;
+        skill.level++;
+        needed = xpNeeded(skill.level);
+      }
+      skill.btn.innerText = `${skill.name} (Lvl ${skill.level})`;
+      let percent = (skill.xp / needed) * 100;
+      skill.progressFill.style.width = percent + "%";
+      if (skill.name === "Combat") updateCombatInfo();
+    }
+
+    // Idle loop
+    setInterval(() => {
+      if (!activeSkill) return;
+      const skill = skills.find(s => s.name === activeSkill);
+      addXP(skill, 5);
+    }, 2000);
+
+    // Save/Load
+    function saveGame() {
+      localStorage.setItem("gameSave", JSON.stringify({ gold, prestige, skills }));
+      alert("Game saved!");
+    }
+    function loadGame() {
+      let data = JSON.parse(localStorage.getItem("gameSave"));
+      if (!data) return;
+      gold = data.gold;
+      prestige = data.prestige;
+      data.skills.forEach((saved, i) => {
+        skills[i].xp = saved.xp;
+        skills[i].level = saved.level;
+        addXP(skills[i], 0); // force update
+      });
+      updateCombatInfo();
+      alert("Game loaded!");
+    }
+    function resetGame() {
+      if (confirm("Weet je het zeker?")) {
+        localStorage.removeItem("gameSave");
+        location.reload();
+      }
+    }
+
+    // Cheat menu functies
+    function cheatGold() {
+      gold += 1000;
+      alert(`+1000 goud! Totaal: ${gold}`);
+    }
+    function cheatXP() {
+      if (!activeSkill) return alert("Geen actieve skill!");
+      const skill = skills.find(s => s.name === activeSkill);
+      addXP(skill, 1000);
+      alert(`+1000 XP voor ${skill.name}`);
+    }
+    function cheatLevels() {
+      if (!activeSkill) return alert("Geen actieve skill!");
+      const skill = skills.find(s => s.name === activeSkill);
+      for (let i = 0; i < 10; i++) {
+        addXP(skill, xpNeeded(skill.level));
+      }
+      alert(`+10 Levels voor ${skill.name}`);
+    }
+    function cheatPrestige() {
+      prestige += 10;
+      alert(`+10 Prestige! Totaal: ${prestige}`);
+    }
+  </script>
+</body>
+</html>
