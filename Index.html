@@ -1,208 +1,703 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Melvor Idle</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #1e1e1e;
-      color: white;
-      text-align: center;
-    }
-    h1 { color: gold; }
-    #skill-menu button, #combat-menu button, #settings-menu button, #cheat-menu button {
-      margin: 5px;
-      padding: 10px;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    .active { border: 2px solid gold; }
-    .progress {
-      width: 200px;
-      background: #333;
-      border-radius: 5px;
-      margin: 5px auto;
-      height: 20px;
-      position: relative;
-    }
-    .progress-fill {
-      background: limegreen;
-      height: 100%;
-      width: 0%;
-      border-radius: 5px;
-    }
-    .skill-container {
-      margin-bottom: 10px;
-    }
-    #inventory { margin-top: 20px; }
-    #settings-menu, #cheat-menu { margin-top: 30px; }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Mini Melvor Idle — Fixed + Cheat</title>
+<style>
+  :root{--bg:#111;--panel:#1b1b1b;--muted:#777;--accent:#ffd54a;--ok:#4caf50;--bad:#e57373;--bar:#2e7d32}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#f5f5f5;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  header{position:sticky;top:0;background:#141414;border-bottom:1px solid #222;z-index:5;padding:10px}
+  .nav{display:flex;gap:8px;overflow:auto}
+  .nav button{flex:1;padding:8px 10px;border:1px solid #333;background:#1f1f1f;color:#eee;border-radius:8px}
+  .nav button.active{outline:2px solid var(--accent)}
+  main{padding:12px;max-width:1100px;margin:0 auto}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .panel{background:var(--panel);border:1px solid #222;border-radius:10px;padding:12px;flex:1;min-width:280px}
+  h1{font-size:18px;margin:0 0 8px}
+  .muted{color:var(--muted)}
+  .skill-toolbar{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .skill-toolbar button{padding:6px 10px;border-radius:20px;border:1px solid #333;background:#202020;color:#eee}
+  .skill-toolbar button.active{background:#2a2a2a;outline:2px solid var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:10px;position:relative}
+  .card.active{border-color:var(--accent);box-shadow:0 0 0 2px rgba(255,213,74,.12)}
+  .card.locked{opacity:.55}
+  .card h4{margin:0 0 6px;font-size:15px;display:flex;justify-content:space-between;gap:8px}
+  .bar{height:10px;background:#2b2b2b;border-radius:999px;overflow:hidden;margin-top:6px}
+  .bar>span{display:block;height:100%;background:var(--bar);width:0%}
+  .kpi{display:flex;justify-content:space-between;font-size:12px;margin:6px 0}
+  .card button{width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:#232323;color:#eee}
+  .hp-wrap{display:flex;align-items:center;gap:8px}
+  .hp{flex:1}
+  select, .btn{width:100%;padding:10px;border-radius:8px;border:1px solid #333;background:#222;color:#eee}
+  .btn-primary{background:#2a2a2a;border:1px solid #444}
+  .btn-danger{background:#3a1e1e;border:1px solid #5c2a2a}
+  .inv{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+  .inv .item{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:8px}
+  .gold{font-weight:600;color:#ffeb3b}
+  .shop-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  .shop-item{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:10px}
+  .shop-item h4{margin:0 0 6px}
+  .price{color:#ffeb3b;font-weight:600}
+  .badge{font-size:11px;background:#2a2a2a;border:1px solid #444;border-radius:999px;padding:2px 8px;margin-left:6px}
+  #toasts{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:50}
+  .toast{background:#1f1f1f;border:1px solid #333;border-radius:10px;padding:10px 12px;min-width:220px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  .toast.ok{border-color:#2e7d32}
+  .toast.bad{border-color:#8e2a2a}
+  .spacer{height:6px}
+  .center{display:flex;justify-content:center;align-items:center}
+  /* cheat tab styling */
+  .cheat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:8px}
+  .cheat-grid button{padding:10px;border-radius:8px}
+  @media(max-width:600px){
+    .nav button{font-size:13px;padding:8px}
+    .card h4{font-size:14px}
+  }
+</style>
 </head>
 <body>
-  <h1>Mini Melvor Idle</h1>
-
-  <div id="skill-menu"></div>
-  <div id="combat-menu"></div>
-  <div id="active-skill"></div>
-  <div id="inventory"></div>
-
-  <div id="settings-menu">
-    <h2>⚙️ Settings</h2>
-    <button onclick="saveGame()">Save Game</button>
-    <button onclick="loadGame()">Load Game</button>
-    <button onclick="resetGame()">Reset Game</button>
+<header>
+  <h1>Mini Melvor Idle — verbeterd</h1>
+  <div class="nav">
+    <button data-tab="skills" class="active">Skills</button>
+    <button data-tab="combat">Combat</button>
+    <button data-tab="inventory">Inventory</button>
+    <button data-tab="shop">Shop</button>
+    <button data-tab="settings">Settings</button>
+    <button data-tab="cheat">Cheat</button>
   </div>
+</header>
 
-  <div id="cheat-menu">
-    <h2>🧪 Cheat Menu</h2>
-    <button onclick="cheatGold()">+1000 Gold</button>
-    <button onclick="cheatXP()">+1000 XP (active skill)</button>
-    <button onclick="cheatLevels()">+10 Levels (active skill)</button>
-    <button onclick="cheatPrestige()">+10 Prestige</button>
-  </div>
+<main>
+  <!-- Skills -->
+  <section id="tab-skills">
+    <div class="panel">
+      <div class="skill-toolbar">
+        <button data-filter="All" class="active">Alle</button>
+        <button data-filter="Gathering">Gathering</button>
+        <button data-filter="Production">Production</button>
+        <button data-filter="Utility">Utility</button>
+      </div>
+      <div id="skillsGrid" class="grid"></div>
+      <p class="muted">Tik op "Train" om een skill actief te maken. Alleen de actieve skill traint automatisch.</p>
+    </div>
+  </section>
 
-  <script>
-    let gold = 0;
-    let prestige = 0;
-    let activeSkill = null;
+  <!-- Combat -->
+  <section id="tab-combat" style="display:none">
+    <div class="row">
+      <div class="panel" style="min-width:320px">
+        <h2>Doelwit</h2>
+        <select id="monsterSelect"></select>
+        <div class="spacer"></div>
+        <div id="monsterPanel"></div>
+        <div class="spacer"></div>
+        <button id="trainCombatBtn" class="btn btn-primary">Train Combat (actief zetten)</button>
+      </div>
+      <div class="panel" style="min-width:280px;max-width:400px">
+        <h2>Uitrusting & Stats</h2>
+        <p>Schade per slag: <b id="playerDmg">1</b></p>
+        <p>XP multiplier: <b id="xpMultLabel">1.00×</b> <span class="muted">(incl. prestige & upgrades)</span></p>
+        <p class="muted">De speler ontvangt geen schade in dit prototype (idle-vriendelijk).</p>
+      </div>
+    </div>
+  </section>
 
-    const skills = [
-      { name: "Woodcutting", xp: 0, level: 1 },
-      { name: "Fishing", xp: 0, level: 1 },
-      { name: "Mining", xp: 0, level: 1 },
-      { name: "Smithing", xp: 0, level: 1 },
-      { name: "Cooking", xp: 0, level: 1 },
-      { name: "Farming", xp: 0, level: 1 },
-      { name: "Crafting", xp: 0, level: 1 },
-      { name: "Runecrafting", xp: 0, level: 1 },
-      { name: "Herblore", xp: 0, level: 1 },
-      { name: "Thieving", xp: 0, level: 1 },
-      { name: "Agility", xp: 0, level: 1 },
-      { name: "Prayer", xp: 0, level: 1 },
-      { name: "Magic", xp: 0, level: 1 },
-      { name: "Ranged", xp: 0, level: 1 },
-      { name: "Combat", xp: 0, level: 1 }
-    ];
+  <!-- Inventory -->
+  <section id="tab-inventory" style="display:none">
+    <div class="panel">
+      <h2>Inventory</h2>
+      <p>Gold: <span class="gold" id="goldLabel">0</span></p>
+      <div id="invGrid" class="inv"></div>
+    </div>
+  </section>
 
-    // UI genereren
-    const skillMenu = document.getElementById("skill-menu");
-    skills.forEach(skill => {
-      const container = document.createElement("div");
-      container.classList.add("skill-container");
+  <!-- Shop -->
+  <section id="tab-shop" style="display:none">
+    <div class="row">
+      <div class="panel">
+        <h2>Verkoop</h2>
+        <p class="muted">Verkoop alle resources (geen unieke loot) voor gold.</p>
+        <button id="sellAllBtn" class="btn">Sell All</button>
+      </div>
+      <div class="panel" style="flex:2">
+        <h2>Upgrades</h2>
+        <div id="shopList" class="shop-list"></div>
+      </div>
+    </div>
+  </section>
 
-      const btn = document.createElement("button");
-      btn.innerText = `${skill.name} (Lvl ${skill.level})`;
-      btn.onclick = () => setActiveSkill(skill.name, btn);
+  <!-- Settings -->
+  <section id="tab-settings" style="display:none">
+    <div class="panel">
+      <h2>Prestige</h2>
+      <p>Huidige prestige XP multiplier: <b id="prestigeLabel">1.00×</b></p>
+      <button id="prestigeBtn" class="btn btn-danger">Prestige (reset progress)</button>
+      <p class="muted">Prestige reset skills, inventory en gold; je krijgt permanent +10% XP (stapelt).</p>
+    </div>
+    <div class="panel">
+      <h2>Opslag</h2>
+      <div class="inline">
+        <button id="saveBtn" class="btn">Handmatig opslaan</button>
+        <button id="wipeBtn" class="btn btn-danger">Volledige reset</button>
+      </div>
+      <p class="muted">Autosave is actief. Lichte offline progress voor niet-combat skills.</p>
+    </div>
+  </section>
 
-      const progress = document.createElement("div");
-      progress.classList.add("progress");
+  <!-- Cheat -->
+  <section id="tab-cheat" style="display:none">
+    <div class="panel">
+      <h2>Cheat Menu</h2>
+      <p class="muted">Alle knoppen voor testen en debuggen. Gebruik voorzichtig.</p>
+      <div class="cheat-grid">
+        <button id="cheatGoldBtn">+1000 Gold</button>
+        <button id="cheatXpBtn">+1000 XP (actieve skill)</button>
+        <button id="cheatLevelsBtn">+10 Levels (actieve skill)</button>
+        <button id="cheatPrestigeBtn">+10 Prestige</button>
+      </div>
+    </div>
+  </section>
+</main>
 
-      const fill = document.createElement("div");
-      fill.classList.add("progress-fill");
-      progress.appendChild(fill);
+<div id="toasts"></div>
 
-      container.appendChild(btn);
-      container.appendChild(progress);
-      skillMenu.appendChild(container);
+<script>
+/* =========================
+   DATA & STATE (unchanged core structure, with small tweaks)
+   ========================= */
+const TICK_MS = 2000;            // tick interval
+const OFFLINE_MAX_S = 60*60*4;   // 4 uur max offline
+let lastTimestamp = Date.now();
 
-      skill.btn = btn;
-      skill.progressFill = fill;
+const skillDefs = [
+  // Gathering (5)
+  {name:"Woodcutting", icon:"🪓", cat:"Gathering", item:"Logs", xpPer:3, yield:1, deps:null},
+  {name:"Fishing",     icon:"🎣", cat:"Gathering", item:"Fish", xpPer:3, yield:1, deps:null},
+  {name:"Mining",      icon:"⛏️", cat:"Gathering", item:"Ore",  xpPer:3, yield:1, deps:{skill:"Woodcutting",level:5}},
+  {name:"Farming",     icon:"🌾", cat:"Gathering", item:"Crop", xpPer:3, yield:1, deps:null},
+  {name:"Hunting",     icon:"🏹", cat:"Gathering", item:"Meat", xpPer:3, yield:1, deps:null},
+  // Production (7)
+  {name:"Firemaking",  icon:"🔥", cat:"Production", item:"Ash", xpPer:3, yield:1, deps:{skill:"Woodcutting",level:3}},
+  {name:"Cooking",     icon:"🍳", cat:"Production", item:"Cooked Fish", xpPer:3, yield:1, deps:{skill:"Fishing",level:3}},
+  {name:"Smithing",    icon:"⚒️", cat:"Production", item:"Ingot", xpPer:3, yield:1, deps:{skill:"Mining",level:3}},
+  {name:"Crafting",    icon:"🧵", cat:"Production", item:"Plank", xpPer:3, yield:1, deps:{skill:"Mining",level:2}},
+  {name:"Fletching",   icon:"🏹", cat:"Production", item:"Arrow", xpPer:3, yield:1, deps:{skill:"Woodcutting",level:4}},
+  {name:"Runecrafting",icon:"🪔", cat:"Production", item:"Rune", xpPer:3, yield:1, deps:{skill:"Magic",level:3}},
+  {name:"Herblore",    icon:"🧪", cat:"Production", item:"Potion", xpPer:3, yield:1, deps:{skill:"Farming",level:3}},
+  // Utility (2)
+  {name:"Thieving",    icon:"🗝️", cat:"Utility", item:"Coin Pouch", xpPer:3, yield:1, deps:null},
+  {name:"Magic",       icon:"✨", cat:"Utility", item:"Mana", xpPer:3, yield:1, deps:null},
+  // Combat (included)
+  {name:"Combat",      icon:"⚔️", cat:"Combat", item:"Loot", xpPer:3, yield:0, deps:null},
+];
+
+const priceTable = {
+  "Logs":1,"Fish":1,"Ore":2,"Crop":1,"Meat":1,"Ash":1,"Cooked Fish":3,"Ingot":5,"Plank":2,"Arrow":1,"Rune":8,"Potion":6,"Coin Pouch":3,"Mana":0,
+  "Goblin Ear":2,"Wolf Pelt":4,"Bone":2,"Gold":1
+};
+
+const monsters = [
+  {id:"goblin",  name:"Goblin",  maxHp:25, xp:10,  loot:[{item:"Gold",amount:3,chance:1},{item:"Goblin Ear",amount:1,chance:0.5}]},
+  {id:"wolf",    name:"Wolf",    maxHp:40, xp:16,  loot:[{item:"Gold",amount:5,chance:1},{item:"Wolf Pelt",amount:1,chance:0.35}]},
+  {id:"skeleton",name:"Skeleton",maxHp:55, xp:24,  loot:[{item:"Gold",amount:7,chance:1},{item:"Bone",amount:2,chance:0.5}]},
+];
+
+const upgrades = [
+  {id:"axe1",name:"Bronze Axe",desc:"+50% yield Woodcutting",cost:50,kind:"yield",target:"Woodcutting",mult:1.5},
+  {id:"rod1",name:"Bronze Rod",desc:"+50% yield Fishing",cost:50,kind:"yield",target:"Fishing",mult:1.5},
+  {id:"pick1",name:"Bronze Pick",desc:"+50% yield Mining",cost:60,kind:"yield",target:"Mining",mult:1.5},
+  {id:"pan1",name:"Chef Pan",desc:"+50% yield Cooking",cost:60,kind:"yield",target:"Cooking",mult:1.5},
+  {id:"forge1",name:"Small Forge",desc:"+50% yield Smithing",cost:80,kind:"yield",target:"Smithing",mult:1.5},
+  {id:"staff1",name:"Novice Staff",desc:"+50% yield Magic",cost:70,kind:"yield",target:"Magic",mult:1.5},
+  {id:"blade1",name:"Training Sword",desc:"+1 combat damage",cost:75,kind:"damage",target:"Combat",add:1},
+  {id:"xp1",name:"Scholar Tome",desc:"+10% XP (alle skills)",cost:120,kind:"xpmult",target:"Global",mult:1.10},
+];
+
+let state = {
+  skills:{},            // name -> {level,xp,xpNeeded}
+  inventory:{},         // item -> qty
+  gold:0,
+  activeSkill:null,
+  selectedMonster: monsters[0].id,
+  monsterHp: monsters[0].maxHp,
+  upgradesBought:{},
+  prestigeMult:1.0,
+};
+
+/* UI references */
+const ui = {
+  skillsGrid: document.getElementById('skillsGrid'),
+  invGrid: document.getElementById('invGrid'),
+  goldLabel: document.getElementById('goldLabel'),
+  monsterSelect: document.getElementById('monsterSelect'),
+  monsterPanel: document.getElementById('monsterPanel'),
+  trainCombatBtn: document.getElementById('trainCombatBtn'),
+  shopList: document.getElementById('shopList'),
+  prestigeLabel: document.getElementById('prestigeLabel'),
+  xpMultLabel: document.getElementById('xpMultLabel'),
+  playerDmg: document.getElementById('playerDmg'),
+  toasts: document.getElementById('toasts'),
+  skillCards: {} // name -> {card, levelEl, xpEl, barFill, button}
+};
+
+const skillMap = new Map(); skillDefs.forEach(s=>skillMap.set(s.name,s));
+
+/* =========================
+   UTILITIES
+   ========================= */
+function toast(msg, type="ok", ms=2200){
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  ui.toasts.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, ms);
+}
+function getXpNeeded(level){ return Math.floor(10 * Math.pow(1.5, level-1)); }
+function canUseSkill(name){
+  const def = skillMap.get(name);
+  if(!def || !def.deps) return true;
+  const req = def.deps;
+  const s = state.skills[req.skill];
+  return s && s.level >= req.level;
+}
+function getYieldMult(name){
+  let mult = 1;
+  for(const id in state.upgradesBought){
+    const up = upgrades.find(u=>u.id===id);
+    if(!up) continue;
+    if(up.kind==="yield" && up.target===name) mult *= up.mult;
+  }
+  return mult;
+}
+function getXpMult(){ let m = state.prestigeMult; for(const id in state.upgradesBought){ const up = upgrades.find(u=>u.id===id); if(up && up.kind==="xpmult") m *= up.mult; } return m; }
+function getPlayerDamage(){ let dmg = 1; for(const id in state.upgradesBought){ const up = upgrades.find(u=>u.id===id); if(up && up.kind==="damage") dmg += (up.add||0); } return dmg; }
+function addItem(item, qty){ if(!qty) return; if(item==="Gold"){ state.gold += qty; updateGold(); return; } state.inventory[item] = (state.inventory[item]||0) + qty; }
+function spendGold(cost){ if(state.gold>=cost){ state.gold-=cost; updateGold(); return true;} return false; }
+function updateGold(){ ui.goldLabel.textContent = state.gold.toString(); }
+
+/* =========================
+   SAVE / LOAD
+   ========================= */
+const SAVE_KEY = "mini_melvor_complete_v1";
+function save(){
+  localStorage.setItem(SAVE_KEY, JSON.stringify({...state,lastTimestamp:Date.now()}));
+}
+function load(){
+  const raw = localStorage.getItem(SAVE_KEY);
+  if(!raw){
+    // init default skills
+    skillDefs.forEach(def=>{
+      state.skills[def.name] = {level:1,xp:0,xpNeeded:getXpNeeded(1)};
     });
+    state.gold = 0;
+    state.inventory = {};
+    state.upgradesBought = {};
+    state.prestigeMult = 1.0;
+    state.activeSkill = null;
+    state.selectedMonster = monsters[0].id;
+    state.monsterHp = monsters[0].maxHp;
+    return;
+  }
+  try{
+    const obj = JSON.parse(raw);
+    state = Object.assign(state, obj);
+    skillDefs.forEach(def=>{
+      if(!state.skills[def.name]) state.skills[def.name] = {level:1,xp:0,xpNeeded:getXpNeeded(1)};
+      if(!state.skills[def.name].xpNeeded) state.skills[def.name].xpNeeded = getXpNeeded(state.skills[def.name].level);
+    });
+    const mon = monsters.find(m=>m.id===state.selectedMonster) || monsters[0];
+    state.selectedMonster = mon.id;
+    state.monsterHp = Math.min(state.monsterHp||mon.maxHp, mon.maxHp);
+    lastTimestamp = obj.lastTimestamp || Date.now();
+  }catch(e){
+    console.warn("Load failed, starting fresh", e);
+    localStorage.removeItem(SAVE_KEY);
+    load();
+  }
+}
 
-    // Combat menu
-    const combatMenu = document.getElementById("combat-menu");
-    const combatInfo = document.createElement("p");
-    combatInfo.innerText = "Combat Level: 1";
-    combatMenu.appendChild(combatInfo);
+/* =========================
+   UI BUILDERS (now store references for live updates)
+   ========================= */
+function buildNav(){
+  document.querySelectorAll('.nav button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      showTab(btn.dataset.tab);
+    });
+  });
+}
+function showTab(name){
+  ["skills","combat","inventory","shop","settings","cheat"].forEach(k=>{
+    const sec = document.getElementById('tab-'+k);
+    if(sec) sec.style.display = (k===name) ? "" : "none";
+  });
+}
 
-    function updateCombatInfo() {
-      const combatSkill = skills.find(s => s.name === "Combat");
-      combatInfo.innerText = `Combat Level: ${combatSkill.level}`;
+/* Build skills grid — create card elements and keep refs in ui.skillCards */
+function buildSkills(filter="All"){
+  ui.skillsGrid.innerHTML = "";
+  ui.skillCards = {}; // reset
+  const list = skillDefs.filter(s=>s.cat!=="Combat" && (filter==="All" || s.cat===filter));
+  list.forEach(def=>{
+    const s = state.skills[def.name];
+    const card = document.createElement('div');
+    card.className = 'card';
+    if(state.activeSkill===def.name) card.classList.add('active');
+    if(!canUseSkill(def.name)) card.classList.add('locked');
+    card.innerHTML = `
+      <h4><span class="skill-title">${def.icon} ${def.name}</span><span class="skill-level">Lvl ${s.level}</span></h4>
+      <div class="kpi"><span class="skill-item">${def.item}</span><span class="skill-xp">${s.xp}/${s.xpNeeded} XP</span></div>
+      <div class="bar"><span class="bar-fill" style="width:${Math.min(100,(s.xp/s.xpNeeded)*100)}%"></span></div>
+      <div class="spacer"></div>
+      <button ${!canUseSkill(def.name) ? 'disabled' : ''}>${state.activeSkill===def.name ? "Actief" : "Train"}</button>
+      ${def.deps?`<p class="muted" style="margin:6px 0 0">Unlock: ${def.deps.skill} lvl ${def.deps.level}</p>`:""}
+    `;
+    const btn = card.querySelector('button');
+    btn.addEventListener('click', ()=>{
+      if(!canUseSkill(def.name)){ toast("Nog gelocked door dependency.", "bad"); return; }
+      state.activeSkill = def.name;
+      updateActiveHighlights();
+      refreshPartialSkill(def.name);
+      save();
+    });
+    ui.skillsGrid.appendChild(card);
+    // store refs
+    ui.skillCards[def.name] = {
+      card,
+      levelEl: card.querySelector('.skill-level'),
+      xpEl: card.querySelector('.skill-xp'),
+      barFill: card.querySelector('.bar-fill'),
+      button: btn
+    };
+  });
+}
+
+/* Build combat UI */
+function buildCombat(){
+  ui.monsterSelect.innerHTML = "";
+  monsters.forEach(m=>{
+    const opt = document.createElement('option'); opt.value = m.id; opt.textContent = `${m.name} (HP ${m.maxHp})`;
+    if(m.id===state.selectedMonster) opt.selected = true;
+    ui.monsterSelect.appendChild(opt);
+  });
+  ui.monsterSelect.onchange = ()=>{
+    state.selectedMonster = ui.monsterSelect.value;
+    const mon = monsters.find(m=>m.id===state.selectedMonster);
+    state.monsterHp = mon.maxHp;
+    renderMonsterPanel();
+    save();
+  };
+  ui.trainCombatBtn.onclick = ()=>{
+    state.activeSkill = "Combat";
+    toast("Combat actief", "ok");
+    updateActiveHighlights();
+    refreshPartialSkill("Combat");
+    save();
+  };
+  renderMonsterPanel();
+  updateStatsPanel();
+}
+
+function renderMonsterPanel(){
+  const mon = monsters.find(m=>m.id===state.selectedMonster);
+  const hpPct = Math.max(0, Math.min(100, (state.monsterHp/mon.maxHp)*100));
+  const combatLvl = state.skills["Combat"] ? state.skills["Combat"].level : 1;
+  ui.monsterPanel.innerHTML = `
+    <div class="hp-wrap">
+      <strong>${mon.name} — Combat lvl ${combatLvl}</strong>
+      <div class="hp bar" style="margin-left:8px"><span style="width:${hpPct}%"></span></div>
+      <span>${Math.max(0,Math.ceil(state.monsterHp))}/${mon.maxHp}</span>
+    </div>
+    <p class="muted">Loot: ${mon.loot.map(l => `${l.item}${l.item!=="Gold" ? ` ×${l.amount}`:""} (${Math.round(l.chance*100)}%)`).join(", ")}</p>
+  `;
+}
+
+/* Build inventory and shop */
+function buildInventory(){
+  ui.invGrid.innerHTML = "";
+  updateGold();
+  const entries = Object.entries(state.inventory).filter(([k,v])=>v>0);
+  if(entries.length===0){
+    ui.invGrid.innerHTML = `<div class="item muted">Leeg… verzamel resources of versla monsters.</div>`;
+    return;
+  }
+  entries.forEach(([item,qty])=>{
+    const price = priceTable[item] ?? 0;
+    const div = document.createElement('div'); div.className='item';
+    div.innerHTML = `<strong>${item}</strong><div class="muted">Qty: ${qty}${price?` · Value: ${price}g`:""}</div>`;
+    ui.invGrid.appendChild(div);
+  });
+}
+
+function buildShop(){
+  ui.shopList.innerHTML = "";
+  upgrades.forEach(up=>{
+    const bought = !!state.upgradesBought[up.id];
+    const div = document.createElement('div'); div.className='shop-item';
+    div.innerHTML = `
+      <h4>${up.name} ${bought?`<span class="badge">Gekocht</span>`:""}</h4>
+      <p class="muted">${up.desc}</p>
+      <div class="inline"><span class="price">💰 ${up.cost}g</span></div><div class="spacer"></div>
+      <button ${bought?"disabled":""} class="btn">${bought?"Reeds gekocht":"Koop"}</button>
+    `;
+    div.querySelector('button').onclick = ()=>{
+      if(bought) return;
+      if(!spendGold(up.cost)){ toast("Niet genoeg gold.", "bad"); return; }
+      state.upgradesBought[up.id] = true;
+      toast(`Gekocht: ${up.name}`);
+      updateStatsPanel();
+      buildShop();
+      save();
+    };
+    ui.shopList.appendChild(div);
+  });
+  document.getElementById('sellAllBtn').onclick = ()=>{
+    let earned = 0;
+    for(const item in state.inventory){
+      if(item==="Gold") continue;
+      const p = priceTable[item] ?? 0;
+      if(p>0){ earned += p * (state.inventory[item]||0); state.inventory[item]=0; }
     }
+    if(earned>0){ state.gold += earned; updateGold(); buildInventory(); toast(`Verkocht voor ${earned}g`); save(); }
+    else toast("Niets verkoopbaars.", "bad");
+  };
+}
 
-    function setActiveSkill(name, btn) {
-      activeSkill = name;
-      skills.forEach(s => s.btn.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById("active-skill").innerText =
-        `Actief: ${name}`;
-    }
+/* =========================
+   GAME LOGIC (with UI updates)
+   ========================= */
+function gainXp(name, base){
+  const mult = getXpMult();
+  const s = state.skills[name];
+  s.xp += Math.floor(base * mult);
+  let leveled = false;
+  while(s.xp >= s.xpNeeded){
+    s.xp -= s.xpNeeded;
+    s.level++;
+    s.xpNeeded = getXpNeeded(s.level);
+    toast(`${name} level ${s.level}!`);
+    leveled = true;
+  }
+  refreshPartialSkill(name);
+  if(leveled) updateStatsPanel();
+}
 
-    function xpNeeded(level) {
-      return Math.floor(50 * Math.pow(1.15, level - 1));
-    }
+function awardRawXp(name, amount){
+  // used by cheat: add raw xp ignoring getXpMult
+  const s = state.skills[name];
+  s.xp += amount;
+  let leveled = false;
+  while(s.xp >= s.xpNeeded){
+    s.xp -= s.xpNeeded;
+    s.level++;
+    s.xpNeeded = getXpNeeded(s.level);
+    toast(`${name} level ${s.level}!`);
+    leveled = true;
+  }
+  refreshPartialSkill(name);
+  if(leveled) updateStatsPanel();
+}
 
-    function addXP(skill, amount) {
-      skill.xp += amount;
-      let needed = xpNeeded(skill.level);
-      while (skill.xp >= needed) {
-        skill.xp -= needed;
-        skill.level++;
-        needed = xpNeeded(skill.level);
+function trainSkillTick(name){
+  const def = skillMap.get(name);
+  if(!def) return;
+  if(!canUseSkill(name)) return;
+  const y = Math.max(1, Math.floor(def.yield * getYieldMult(name)));
+  addItem(def.item, y);
+  gainXp(name, def.xpPer);
+}
+
+function combatTick(){
+  const mon = monsters.find(m=>m.id===state.selectedMonster);
+  if(!mon) return;
+  const dmg = getPlayerDamage();
+  state.monsterHp -= dmg;
+  if(state.monsterHp <= 0){
+    gainXp("Combat", mon.xp);
+    mon.loot.forEach(l=>{
+      if(Math.random() < l.chance){ addItem(l.item, l.amount); }
+    });
+    state.monsterHp = mon.maxHp;
+    renderMonsterPanel();
+    buildInventory(); // show loot immediately
+  } else {
+    renderMonsterPanel();
+  }
+}
+
+/* =========================
+   OFFLINE PROGRESS
+   ========================= */
+function applyOffline(){
+  const now = Date.now();
+  let secs = Math.floor((now - lastTimestamp)/1000);
+  if(secs<=0) { lastTimestamp = now; return; }
+  secs = Math.min(secs, OFFLINE_MAX_S);
+  const ticks = Math.floor((secs * 1000) / TICK_MS);
+  if(ticks>0 && state.activeSkill && state.activeSkill!=="Combat"){
+    const def = skillMap.get(state.activeSkill);
+    if(def){
+      const y = Math.max(1, Math.floor(def.yield * getYieldMult(def.name)));
+      const xpGain = Math.floor(def.xpPer * getXpMult());
+      addItem(def.item, y * ticks);
+      const s = state.skills[def.name];
+      s.xp += xpGain * ticks;
+      while(s.xp >= s.xpNeeded){
+        s.xp -= s.xpNeeded; s.level++; s.xpNeeded = getXpNeeded(s.level);
       }
-      skill.btn.innerText = `${skill.name} (Lvl ${skill.level})`;
-      let percent = (skill.xp / needed) * 100;
-      skill.progressFill.style.width = percent + "%";
-      if (skill.name === "Combat") updateCombatInfo();
+      toast(`Offline progress: ${ticks} acties voor ${def.name}`);
+      refreshPartialSkill(def.name);
     }
+  }
+  lastTimestamp = now;
+}
 
-    // Idle loop
-    setInterval(() => {
-      if (!activeSkill) return;
-      const skill = skills.find(s => s.name === activeSkill);
-      addXP(skill, 5);
-    }, 2000);
+/* =========================
+   TICK LOOP
+   ========================= */
+function tick(){
+  if(!state.activeSkill) return;
+  if(state.activeSkill==="Combat") {
+    combatTick();
+    updateStatsPanel();
+    renderMonsterPanel();
+  } else {
+    trainSkillTick(state.activeSkill);
+  }
+}
 
-    // Save/Load
-    function saveGame() {
-      localStorage.setItem("gameSave", JSON.stringify({ gold, prestige, skills }));
-      alert("Game saved!");
-    }
-    function loadGame() {
-      let data = JSON.parse(localStorage.getItem("gameSave"));
-      if (!data) return;
-      gold = data.gold;
-      prestige = data.prestige;
-      data.skills.forEach((saved, i) => {
-        skills[i].xp = saved.xp;
-        skills[i].level = saved.level;
-        addXP(skills[i], 0); // force update
-      });
-      updateCombatInfo();
-      alert("Game loaded!");
-    }
-    function resetGame() {
-      if (confirm("Weet je het zeker?")) {
-        localStorage.removeItem("gameSave");
-        location.reload();
-      }
-    }
+/* =========================
+   UI Helpers: update partial data efficiently
+   ========================= */
+function refreshPartialSkill(name){
+  const entry = ui.skillCards[name];
+  if(!entry) {
+    // skill card not currently visible (filter), so do nothing
+    return;
+  }
+  const s = state.skills[name];
+  entry.levelEl.textContent = `Lvl ${s.level}`;
+  entry.xpEl.textContent = `${s.xp}/${s.xpNeeded} XP`;
+  entry.barFill.style.width = `${Math.min(100,(s.xp/s.xpNeeded)*100)}%`;
+  entry.button.textContent = state.activeSkill===name ? "Actief" : "Train";
+  if(!canUseSkill(name)){ entry.card.classList.add('locked'); entry.button.disabled = true; } else { entry.card.classList.remove('locked'); entry.button.disabled = false; }
+  // also highlight active
+  if(state.activeSkill===name) entry.card.classList.add('active'); else entry.card.classList.remove('active');
+}
 
-    // Cheat menu functies
-    function cheatGold() {
-      gold += 1000;
-      alert(`+1000 goud! Totaal: ${gold}`);
-    }
-    function cheatXP() {
-      if (!activeSkill) return alert("Geen actieve skill!");
-      const skill = skills.find(s => s.name === activeSkill);
-      addXP(skill, 1000);
-      alert(`+1000 XP voor ${skill.name}`);
-    }
-    function cheatLevels() {
-      if (!activeSkill) return alert("Geen actieve skill!");
-      const skill = skills.find(s => s.name === activeSkill);
-      for (let i = 0; i < 10; i++) {
-        addXP(skill, xpNeeded(skill.level));
-      }
-      alert(`+10 Levels voor ${skill.name}`);
-    }
-    function cheatPrestige() {
-      prestige += 10;
-      alert(`+10 Prestige! Totaal: ${prestige}`);
-    }
-  </script>
+function updateActiveHighlights(){
+  Object.keys(ui.skillCards).forEach(name=>{
+    const e = ui.skillCards[name];
+    if(state.activeSkill===name) e.card.classList.add('active'); else e.card.classList.remove('active');
+    e.button.textContent = state.activeSkill===name ? "Actief" : "Train";
+  });
+  // highlight monster panel if Combat active
+  const allMonPanels = document.querySelectorAll('.card'); // not ideal but harmless
+  renderMonsterPanel();
+}
+
+/* =========================
+   STATS / PANELS
+   ========================= */
+function updateStatsPanel(){
+  ui.playerDmg.textContent = getPlayerDamage();
+  ui.xpMultLabel.textContent = `${getXpMult().toFixed(2)}×`;
+  ui.prestigeLabel.textContent = `${state.prestigeMult.toFixed(2)}×`;
+  updateGold();
+}
+
+/* =========================
+   SETTINGS & CONTROL BINDINGS
+   ========================= */
+document.getElementById('saveBtn').onclick = ()=>{ save(); toast("Opgeslagen"); };
+document.getElementById('wipeBtn').onclick = ()=>{
+  if(confirm("Zeker weten? Dit wist ALLES.")){ localStorage.removeItem(SAVE_KEY); location.reload(); }
+};
+document.getElementById('prestigeBtn').onclick = ()=>{
+  if(confirm("Prestige? Reset alles en krijg +10% XP permanent.")){
+    state.inventory = {}; state.gold = 0; state.upgradesBought = {};
+    for(const name in state.skills){ state.skills[name] = {level:1,xp:0,xpNeeded:getXpNeeded(1)}; }
+    state.prestigeMult = +(state.prestigeMult * 1.10).toFixed(2);
+    toast("Prestige voltooid! +10% XP");
+    refreshAllUI(); save();
+  }
+};
+
+/* =========================
+   CHEAT BUTTONS
+   ========================= */
+document.getElementById('cheatGoldBtn').onclick = ()=>{
+  state.gold += 1000; updateGold(); toast("+1000 Gold"); save();
+};
+document.getElementById('cheatXpBtn').onclick = ()=>{
+  if(!state.activeSkill) return toast("Geen actieve skill geselecteerd", "bad");
+  awardRawXp(state.activeSkill, 1000);
+  toast(`+1000 XP toegevoegd aan ${state.activeSkill}`);
+  save();
+};
+document.getElementById('cheatLevelsBtn').onclick = ()=>{
+  if(!state.activeSkill) return toast("Geen actieve skill geselecteerd", "bad");
+  const s = state.skills[state.activeSkill];
+  for(let i=0;i<10;i++){ s.level++; s.xpNeeded = getXpNeeded(s.level); s.xp=0; }
+  refreshPartialSkill(state.activeSkill);
+  updateStatsPanel();
+  toast(`+10 levels voor ${state.activeSkill}`);
+  save();
+};
+document.getElementById('cheatPrestigeBtn').onclick = ()=>{
+  // interpretatie: +10 prestige steps => multiply prestigeMult by 1.1^10
+  state.prestigeMult = +(state.prestigeMult * Math.pow(1.1,10)).toFixed(4);
+  updateStatsPanel();
+  toast("+10 prestige-steps (permanente XP bonus)");
+  save();
+};
+
+/* =========================
+   REFRESH UI & INIT
+   ========================= */
+function refreshAllUI(){
+  // rebuild visible lists (safe)
+  const activeFilterBtn = document.querySelector('.skill-toolbar button.active');
+  buildSkills(activeFilterBtn ? activeFilterBtn.dataset.filter : "All");
+  buildCombat();
+  buildInventory();
+  buildShop();
+  updateStatsPanel();
+  updateActiveHighlights();
+}
+
+function refreshVisibleSkillCards(){
+  Object.keys(ui.skillCards).forEach(name=> refreshPartialSkill(name));
+}
+
+/* =========================
+   INIT
+   ========================= */
+(function init(){
+  // nav
+  buildNav();
+  document.querySelectorAll('.skill-toolbar button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.skill-toolbar button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      buildSkills(btn.dataset.filter);
+    });
+  });
+
+  load();
+  applyOffline();
+  refreshAllUI();
+  // tick loop
+  setInterval(()=>{ tick(); save(); /* update only affected UI */ if(state.activeSkill && state.activeSkill!=="Combat") refreshPartialSkill(state.activeSkill); else if(state.activeSkill==="Combat"){ renderMonsterPanel(); refreshVisibleSkillCards(); } }, TICK_MS);
+
+  // save periodically as backup
+  setInterval(()=>save(), 30000);
+})();
+</script>
 </body>
 </html>
