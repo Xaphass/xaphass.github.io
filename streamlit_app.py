@@ -31,7 +31,7 @@ def extract_actual_url(href):
     try:
         p = urlparse(href)
         qs = parse_qs(p.query)
-        if "uddg" in qs:  # typische DDG redirect: /l/?uddg=...
+        if "uddg" in qs:  # typische DDG redirect
             return unquote(qs["uddg"][0])
         if href.startswith("http"):
             return href
@@ -46,7 +46,7 @@ def extract_actual_url(href):
 # ---------- FUNCTIE MET CACHING ----------
 @st.cache_data(ttl=600)
 def search_duckduckgo(query):
-    """Zoek op DuckDuckGo en haal tot 50 resultaten op (ongefilterd)."""
+    """Zoek op DuckDuckGo en haal tot 50 resultaten op."""
     url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
@@ -77,7 +77,7 @@ def search_duckduckgo(query):
             results.append({"url": actual, "title": full_title, "snippet": snippet_text})
         except Exception:
             continue
-        if len(results) >= 50:  # max 50 resultaten ophalen
+        if len(results) >= 50:  # max 50 resultaten
             break
 
     return results
@@ -112,7 +112,7 @@ def run_search(query):
         st.session_state.last_query = query
         st.session_state.num_results = 10  # start met 10 zichtbaar
     except requests.exceptions.RequestException:
-        st.warning("📡 Geen internetverbinding of server onbereikbaar. Controleer je verbinding.")
+        st.warning("📡 Geen internetverbinding of server onbereikbaar.")
     except RuntimeError as re:
         st.error(str(re))
     except Exception as e:
@@ -129,12 +129,12 @@ if search_clicked:
 
 # Meer resultaten knop
 if more_clicked:
-    if not st.session_state.last_query:
+    if not st.session_state.resultaten:
         st.warning("🔎 Zoek eerst iets voordat je meer resultaten opvraagt.")
-    elif not internet_beschikbaar():
-        st.warning("📡 Geen internetverbinding. Controleer je verbinding en probeer opnieuw.")
     else:
-        st.session_state.num_results += 10
+        # verhoog aantal te tonen resultaten
+        st.session_state.num_results = min(st.session_state.num_results + 10,
+                                          len(st.session_state.resultaten))
 
 # ---------- RESULTAAT WEERGAVE ----------
 resultaten = st.session_state.resultaten[:st.session_state.num_results]
