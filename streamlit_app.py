@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote, unquote, parse_qs, urlparse
+import socket
 
 # ---------- PAGINA INSTELLINGEN ----------
 st.set_page_config(
@@ -12,7 +13,15 @@ st.set_page_config(
 )
 
 st.title("🔍 Zoek App")
-st.write("Voer een zoekterm in en krijg 10 URL's met titel en korte beschrijving.")
+st.write("Voer een zoekterm in en krijg gestructureerde zoekresultaten met titels, snippets en domeinnaam.")
+
+# ---------- INTERNET CHECK ----------
+def internet_beschikbaar():
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=3)
+        return True
+    except OSError:
+        return False
 
 # ---------- FUNCTIE MET CACHING ----------
 @st.cache_data(ttl=600)
@@ -37,13 +46,19 @@ def search_duckduckgo(query, num_results=10):
                 actual_url = unquote(parsed['uddg'][0])
                 title = title_el.text.strip()
                 snippet = snippet_el.text.strip() if snippet_el else ''
+                # Domeinnaam extraheren
+                domain = urlparse(actual_url).netloc.replace("www.", "")
                 results.append({
                     "url": actual_url,
-                    "title": title,
+                    "title": f"{title} – {domain}",
                     "snippet": snippet
                 })
 
     return results
+
+# ---------- INITIAL STATE ----------
+if "num_results" not in st.session_state:
+    st.session_state.num_results = 10
 
 # ---------- UI ----------
 zoekterm = st.text_input(
@@ -51,11 +66,20 @@ zoekterm = st.text_input(
     placeholder="Bijvoorbeeld: beste restaurants Amsterdam"
 )
 
-if st.button("🔎 Zoeken", type="primary", use_container_width=True):
-    if zoekterm:
+col1, col2 = st.columns([4, 1])
+with col1:
+    zoeken = st.button("🔎 Zoeken", use_container_width=True)
+with col2:
+    meer = st.button("🔄 Toon meer resultaten", use_container_width=True)
+
+# ---------- LOGICA ----------
+if zoeken:
+    if not internet_beschikbaar():
+        st.warning("📡 Geen internetverbinding. Controleer je verbinding en probeer opnieuw.")
+    elif zoekterm:
         with st.spinner("Even geduld, zoeken..."):
             try:
-                resultaten = search_duckduckgo(zoekterm, 10)
+                resultaten = search_duckduckgo(zoekterm, st.session_state.num_results)
 
                 if resultaten:
                     st.success(f"✅ {len(resultaten)} resultaten gevonden!")
@@ -67,13 +91,24 @@ if st.button("🔎 Zoeken", type="primary", use_container_width=True):
                             f"**{i}. [{r['title']}]({r['url']})**  \n{r['snippet']}",
                             unsafe_allow_html=True
                         )
+
+                    # Placeholder voor toekomstige AI-samenvatting
+                    st.divider()
+                    st.markdown("🧠 **AI-samenvatting (binnenkort beschikbaar)**")
+                    st.info("Hier komt later een automatische samenvatting van de gevonden pagina’s.")
                 else:
                     st.warning("Geen resultaten gevonden. Probeer een andere zoekterm.")
+            except requests.exceptions.RequestException:
+                st.warning("📡 Geen internetverbinding of server onbereikbaar.")
             except Exception as e:
                 st.error(f"Er is een fout opgetreden: {str(e)}")
                 st.info("Probeer het opnieuw over een paar seconden.")
     else:
         st.warning("⚠️ Voer eerst een zoekterm in!")
 
+elif meer:
+    st.session_state.num_results += 10
+    st.experimental_rerun()
+
 st.divider()
-st.caption("💡 Tip: Deze app werkt ook goed op mobiele telefoons!")
+st.caption("💡 Tip: Voeg deze app toe aan je beginscherm op iPhone voor snelle toegang!")
