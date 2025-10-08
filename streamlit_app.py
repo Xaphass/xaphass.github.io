@@ -33,13 +33,10 @@ def extract_actual_url(href):
         qs = parse_qs(p.query)
         if "uddg" in qs:  # typische DDG redirect: /l/?uddg=...
             return unquote(qs["uddg"][0])
-        # Directe URL mogelijk
         if href.startswith("http"):
             return href
-        # Soms zit uddg= ergens in de string
         if "uddg=" in href:
             after = href.split("uddg=", 1)[1]
-            # strip overige params
             actual = after.split("&")[0]
             return unquote(actual)
     except Exception:
@@ -48,9 +45,8 @@ def extract_actual_url(href):
 
 # ---------- FUNCTIE MET CACHING ----------
 @st.cache_data(ttl=600)
-def search_duckduckgo(query, num_results=10):
-    """Zoek op DuckDuckGo en haal titels, snippets en URL's op.
-       Retourneert lijst van dicts: {'url','title','snippet'}"""
+def search_duckduckgo(query):
+    """Zoek op DuckDuckGo en haal tot 50 resultaten op (ongefilterd)."""
     url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
@@ -58,51 +54,35 @@ def search_duckduckgo(query, num_results=10):
     resp.raise_for_status()
 
     text = resp.text or ""
-    # eenvoudige detectie van blokkering
     if "unusual traffic" in text.lower() or "detected unusual traffic" in text.lower():
         raise RuntimeError("DuckDuckGo lijkt verkeer te blokkeren. Probeer het later opnieuw.")
 
     soup = BeautifulSoup(text, "html.parser")
     results = []
 
-    # DDG plaatst resultaten in .result; we pakken dat defensief op
-    nodes = soup.select(".result") or soup.find_all("div", class_="results_links_deep")
-    count = 0
-    for node in nodes:
-        if count >= num_results:
-            break
+    for node in soup.select('.result'):
         try:
-            # titel-anker (DDG gebruikt vaak a.result__a)
-            title_el = node.select_one(".result__a") or node.find("a")
-            snippet_el = node.select_one(".result__snippet") or node.find("a")
+            title_el = node.select_one('.result__a') or node.find('a')
             if not title_el:
                 continue
             href = title_el.get("href")
             actual = extract_actual_url(href)
             if not actual:
                 continue
-            # title text
             title_text = title_el.get_text(" ", strip=True) or actual
-            snippet_text = ""
-            # probeer snippet uit verschillende plaatsen
-            if snippet_el:
-                snippet_text = snippet_el.get_text(" ", strip=True)
-            # domein toevoegen achter de titel
-            try:
-                domain = urlparse(actual).netloc.replace("www.", "")
-            except Exception:
-                domain = ""
+            snippet_el = node.select_one('.result__snippet')
+            snippet_text = snippet_el.get_text(" ", strip=True) if snippet_el else ''
+            domain = urlparse(actual).netloc.replace("www.", "")
             full_title = f"{title_text} – {domain}" if domain else title_text
-
             results.append({"url": actual, "title": full_title, "snippet": snippet_text})
-            count += 1
         except Exception:
-            # defensief: als één resultaat faalt, skip en ga door
             continue
+        if len(results) >= 50:  # max 50 resultaten ophalen
+            break
 
     return results
 
-# ---------- SESSION STATE INITIALISATIE ----------
+# ---------- SESSION STATE ----------
 if "num_results" not in st.session_state:
     st.session_state.num_results = 10
 if "last_query" not in st.session_state:
@@ -124,13 +104,13 @@ with col2:
     more_clicked = st.button("🔄 Toon meer", use_container_width=True)
 
 # ---------- ACTIES ----------
-def run_search(query, num_results):
-    """Voer zoekopdracht uit en werk session_state bij (met foutafhandeling)."""
+def run_search(query):
+    """Voer zoekopdracht uit en werk session_state bij."""
     try:
-        resultaten = search_duckduckgo(query, num_results)
+        resultaten = search_duckduckgo(query)
         st.session_state.resultaten = resultaten
         st.session_state.last_query = query
-        st.session_state.num_results = num_results
+        st.session_state.num_results = 10  # start met 10 zichtbaar
     except requests.exceptions.RequestException:
         st.warning("📡 Geen internetverbinding of server onbereikbaar. Controleer je verbinding.")
     except RuntimeError as re:
@@ -138,18 +118,16 @@ def run_search(query, num_results):
     except Exception as e:
         st.error(f"Er is iets misgegaan tijdens het ophalen van resultaten: {str(e)}")
 
-# Als Zoeken geklikt: reset aantal naar 10 en zoek
+# Zoekknop
 if search_clicked:
     if not internet_beschikbaar():
         st.warning("📡 Geen internetverbinding. Controleer je verbinding en probeer opnieuw.")
-    elif not zoekterm or zoekterm.strip() == "":
+    elif not zoekterm.strip():
         st.warning("⚠️ Voer eerst een zoekterm in!")
     else:
-        st.session_state.num_results = 10
-        with st.spinner("Even geduld, zoeken..."):
-            run_search(zoekterm.strip(), st.session_state.num_results)
+        run_search(zoekterm.strip())
 
-# Als Meer geklikt: verhoog aantal en zoek met laatste zoekterm (vereist eerst zoeken)
+# Meer resultaten knop
 if more_clicked:
     if not st.session_state.last_query:
         st.warning("🔎 Zoek eerst iets voordat je meer resultaten opvraagt.")
@@ -157,17 +135,16 @@ if more_clicked:
         st.warning("📡 Geen internetverbinding. Controleer je verbinding en probeer opnieuw.")
     else:
         st.session_state.num_results += 10
-        with st.spinner("Meer resultaten ophalen..."):
-            run_search(st.session_state.last_query, st.session_state.num_results)
 
 # ---------- RESULTAAT WEERGAVE ----------
-if st.session_state.resultaten:
-    st.success(f"✅ {len(st.session_state.resultaten)} resultaten getoond (categorie: {st.session_state.last_query})")
+resultaten = st.session_state.resultaten[:st.session_state.num_results]
+
+if resultaten:
+    st.success(f"✅ {len(resultaten)} resultaten getoond voor: {st.session_state.last_query}")
     st.markdown("### 🌐 Zoekresultaten")
     st.divider()
 
-    for i, r in enumerate(st.session_state.resultaten, 1):
-        # veilige keys en fallback
+    for i, r in enumerate(resultaten, 1):
         url = r.get("url", "")
         title = r.get("title", url)
         snippet = r.get("snippet", "")
