@@ -1,8 +1,12 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import quote, unquote, parse_qs, urlparse
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+from urllib.parse import urlparse
 import socket
+import time
 
 # ---------- PAGINA INSTELLINGEN ----------
 st.set_page_config(
@@ -23,67 +27,13 @@ def internet_beschikbaar():
     except OSError:
         return False
 
-# ---------- HELPER: haal echte URL uit DuckDuckGo-href ----------
-def extract_actual_url(href):
-    if not href or not isinstance(href, str):
-        return None
-    try:
-        p = urlparse(href)
-        qs = parse_qs(p.query)
-        if "uddg" in qs:
-            return unquote(qs["uddg"][0])
-        if href.startswith("http"):
-            return href
-        if "uddg=" in href:
-            after = href.split("uddg=", 1)[1]
-            actual = after.split("&")[0]
-            return unquote(actual)
-    except Exception:
-        return None
-    return None
-
-# ---------- FUNCTIE MET CACHING ----------
-@st.cache_data(ttl=600)
-def search_duckduckgo(query):
-    """Zoek op DuckDuckGo en haal max 30 resultaten op."""
-    url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    resp = requests.get(url, headers=headers, timeout=10)
-    resp.raise_for_status()
-    text = resp.text or ""
-    if "unusual traffic" in text.lower():
-        raise RuntimeError("DuckDuckGo blokkeert verkeer. Probeer het later.")
-
-    soup = BeautifulSoup(text, "html.parser")
-    results = []
-    for node in soup.select('.result'):
-        try:
-            title_el = node.select_one('.result__a') or node.find('a')
-            if not title_el:
-                continue
-            href = title_el.get("href")
-            actual = extract_actual_url(href)
-            if not actual:
-                continue
-            title_text = title_el.get_text(" ", strip=True) or actual
-            snippet_el = node.select_one('.result__snippet')
-            snippet_text = snippet_el.get_text(" ", strip=True) if snippet_el else ''
-            domain = urlparse(actual).netloc.replace("www.", "")
-            full_title = f"{title_text} – {domain}" if domain else title_text
-            # favicon URL
-            favicon = f"https://www.google.com/s2/favicons?domain={domain}" if domain else ""
-            results.append({"url": actual, "title": full_title, "snippet": snippet_text, "favicon": favicon})
-        except Exception:
-            continue
-        if len(results) >= 30:
-            break
-    return results
-
 # ---------- SESSION STATE ----------
 if "resultaten" not in st.session_state:
     st.session_state.resultaten = []
 if "last_query" not in st.session_state:
     st.session_state.last_query = ""
+if "max_results" not in st.session_state:
+    st.session_state.max_results = 10
 
 # ---------- UI ----------
 zoekterm = st.text_input(
@@ -92,29 +42,76 @@ zoekterm = st.text_input(
     value=st.session_state.get("last_query", "")
 )
 
-search_clicked = st.button("🔎 Zoeken", use_container_width=True)
+col1, col2 = st.columns([4, 1])
+with col1:
+    search_clicked = st.button("🔎 Zoeken", use_container_width=True)
+with col2:
+    more_clicked = st.button("🔄 Toon meer", use_container_width=True)
+
+# ---------- FUNCTIE VOOR ZOEKEN MET SELENIUM ----------
+def run_search_selenium(query, max_results=30):
+    if not internet_beschikbaar():
+        st.warning("📡 Geen internetverbinding.")
+        return []
+
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--log-level=3")
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+
+    driver.get(f"https://duckduckgo.com/?q={query}")
+
+    time.sleep(2)  # laat de pagina laden
+
+    results = []
+    while len(results) < max_results:
+        nodes = driver.find_elements(By.CSS_SELECTOR, ".result__a")
+        for r in nodes[len(results):max_results]:
+            try:
+                url = r.get_attribute("href")
+                title = r.text
+                domain = urlparse(url).netloc.replace("www.", "")
+                favicon = f"https://www.google.com/s2/favicons?domain={domain}" if domain else ""
+                full_title = f"{title} – {domain}" if domain else title
+                results.append({"url": url, "title": full_title, "favicon": favicon})
+            except Exception:
+                continue
+        # Probeer scrollen om nieuwe resultaten te laden
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.END)
+        time.sleep(2)
+        if len(nodes) >= max_results:
+            break
+
+    driver.quit()
+    return results
 
 # ---------- ACTIES ----------
-def run_search(query):
-    if not internet_beschikbaar():
-        st.warning("📡 Geen internetverbinding. Controleer je verbinding.")
-        return
-    try:
-        resultaten = search_duckduckgo(query)
-        st.session_state.resultaten = resultaten
-        st.session_state.last_query = query
-    except requests.exceptions.RequestException:
-        st.warning("📡 Geen internet of server niet bereikbaar.")
-    except RuntimeError as re:
-        st.error(str(re))
-    except Exception as e:
-        st.error(f"Er is iets misgegaan: {str(e)}")
-
 if search_clicked:
     if not zoekterm.strip():
         st.warning("⚠️ Voer eerst een zoekterm in!")
     else:
-        run_search(zoekterm.strip())
+        with st.spinner("Zoeken..."):
+            resultaten = run_search_selenium(zoekterm.strip(), max_results=30)
+            if resultaten:
+                st.session_state.resultaten = resultaten[:10]
+                st.session_state.last_query = zoekterm.strip()
+                st.session_state.max_results = 10
+            else:
+                st.warning("Geen resultaten gevonden of DuckDuckGo blokkeert het verkeer.")
+
+if more_clicked:
+    if not st.session_state.resultaten:
+        st.warning("🔎 Zoek eerst iets voordat je meer resultaten opvraagt.")
+    else:
+        # Toon 10 extra resultaten als beschikbaar
+        nieuwe_max = st.session_state.max_results + 10
+        st.session_state.max_results = min(len(st.session_state.resultaten) + 10, 30)
+        st.session_state.resultaten = run_search_selenium(
+            st.session_state.last_query,
+            max_results=st.session_state.max_results
+        )
 
 # ---------- RESULTAAT WEERGAVE ----------
 resultaten = st.session_state.resultaten
@@ -124,12 +121,10 @@ if resultaten:
     st.markdown("### 🌐 Zoekresultaten")
     st.divider()
     for i, r in enumerate(resultaten, 1):
-        favicon = r.get("favicon")
-        favicon_html = f"<img src='{favicon}' style='width:16px;height:16px;margin-right:5px;'>" if favicon else ""
+        favicon_html = f"<img src='{r['favicon']}' style='width:16px;height:16px;margin-right:5px;'>" if r['favicon'] else ""
         url = r.get("url", "")
         title = r.get("title", url)
-        snippet = r.get("snippet", "")
-        st.markdown(f"{favicon_html} **{i}. [{title}]({url})**  \n{snippet}", unsafe_allow_html=True)
+        st.markdown(f"{favicon_html} **{i}. [{title}]({url})**", unsafe_allow_html=True)
 
     st.divider()
     st.markdown("🧠 **AI-samenvatting (binnenkort beschikbaar)**")
